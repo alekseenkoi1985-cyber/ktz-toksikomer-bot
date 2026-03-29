@@ -1,12 +1,16 @@
 import os
 import logging
-import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-logging.basicConfig(level=logging.INFO)
+# Logging setup
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
@@ -72,7 +76,7 @@ def get_result_text(score: int) -> str:
         )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info(f"Start command from {update.effective_user.id}")
+    logger.info("Start command received")
     keyboard = [[InlineKeyboardButton("Начать тест КТЗ", callback_data="start_test")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
@@ -89,18 +93,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    logging.info(f"Button click: {query.data} from {update.effective_user.id}")
+    
+    logger.info(f"Button pressed: {query.data}")
 
     if query.data == "start_test":
         context.user_data["score"] = 0
         context.user_data["question_index"] = 0
         await ask_question(query, context)
     elif query.data == "yes":
-        context.user_data["score"] += 1
-        context.user_data["question_index"] += 1
+        context.user_data["score"] = context.user_data.get("score", 0) + 1
+        context.user_data["question_index"] = context.user_data.get("question_index", 0) + 1
         await ask_question(query, context)
     elif query.data == "no":
-        context.user_data["question_index"] += 1
+        context.user_data["question_index"] = context.user_data.get("question_index", 0) + 1
         await ask_question(query, context)
     elif query.data == "restart":
         context.user_data["score"] = 0
@@ -133,45 +138,39 @@ async def ask_question(query, context):
             reply_markup=reply_markup
         )
 
+# Health Check Server
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
-    
     def log_message(self, format, *args):
-        pass
+        return
 
-async def run_bot():
-    logging.info("Initializing application...")
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    
-    logging.info("Starting bot polling...")
-    async with app:
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(drop_pending_updates=True)
-        # Keep running until cancelled
-        while True:
-            await asyncio.sleep(3600)
-
-def bot_thread_func():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_bot())
-
-def main():
-    # Start bot in separate thread with its own loop
-    bot_thread = threading.Thread(target=bot_thread_func, daemon=True)
-    bot_thread.start()
-    
-    # HTTP server runs in main thread (required by Render)
+def run_health_server():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("", port), HealthHandler)
-    logging.info(f"HTTP server started on port {port}")
+    server = HTTPServer(('', port), HealthHandler)
+    logger.info(f"Health check server started on port {port}")
     server.serve_forever()
 
-if __name__ == "__main__":
+def main():
+    # Start health check in thread
+    t = threading.Thread(target=run_health_server, daemon=True)
+    t.start()
+
+    # Start Bot
+    if not BOT_TOKEN:
+        logger.error("No BOT_TOKEN provided!")
+        return
+
+    logger.info("Building application...")
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+
+    logger.info("Bot starting polling...")
+    application.run_polling(drop_pending_updates=True)
+
+if __name__ == '__main__':
     main()
