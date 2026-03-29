@@ -6,6 +6,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN")
+PORT = int(os.environ.get("PORT", 10000))
+WEBHOOK_URL = "https://ktz-toksikomer-bot.onrender.com"
 
 QUESTIONS = [
     "1/5: Требования зафиксированы?",
@@ -57,7 +59,12 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(bh))
-    app.run_polling(drop_pending_updates=True)
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
+    )
 
 if __name__ == "__main__":
     main()
