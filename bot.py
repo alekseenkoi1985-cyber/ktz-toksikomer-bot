@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -50,7 +51,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я помогу оценить *Коэффициент Токсичности Задачи* (КТЗ).\n"
         "Ответь на 5 вопросов и узнай, стоит ли браться за эту задачу.\n\n"
-        f"🔗 Подписывайся на канал @async_mind_it",
+        "🔗 Подписывайся на канал @async_mind_it",
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
@@ -96,7 +97,7 @@ async def ask_question(query, context):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            result_text + f"🔗 Больше про управление задачами на @async_mind_it",
+            result_text + "🔗 Больше про управление задачами на @async_mind_it",
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
@@ -110,20 +111,23 @@ class HealthHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-def run_http_server():
+def run_bot():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    logging.info("Bot starting...")
+    app.run_polling(drop_pending_updates=True)
+
+def main():
+    # Start bot in separate thread
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+    
+    # HTTP server runs in main thread (required by Render)
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("", port), HealthHandler)
     logging.info(f"HTTP server started on port {port}")
     server.serve_forever()
-
-def main():
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
-    http_thread.start()
-
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.run_polling()
 
 if __name__ == "__main__":
     main()
