@@ -22,35 +22,42 @@ def get_res(s):
     if s <= 2: return f"КТЗ={s}: Риск."
     return f"КТЗ={s}: ТРЕВОГА."
 
-async def start(u, c):
-    kb = [[InlineKeyboardButton("Начать", callback_data="s")]]
-    await u.message.reply_text("КТЗ Бот @async_mind_it", reply_markup=InlineKeyboardMarkup(kb))
+async def start(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    kb = [[InlineKeyboardButton("Начать расчет", callback_data="s")]]
+    await u.message.reply_text("Токсикомер задач (КТЗ-калькулятор)\nУзнай уровень токсичности своей задачи за 5 вопросов.\n\nКанал: @async_mind_it", reply_markup=InlineKeyboardMarkup(kb))
 
-async def bh(u, c):
-    q = u.callback_query; await q.answer(); d = q.data
-    if d == "s": c.user_data["s"] = 0; c.user_data["i"] = 0
-    elif d == "y": c.user_data["s"] = c.user_data.get("s", 0) + 1; c.user_data["i"] = c.user_data.get("i", 0) + 1
-    elif d == "n": c.user_data["i"] = c.user_data.get("i", 0) + 1
+async def bh(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    q = u.callback_query
+    await q.answer()
+    d = q.data
     
+    if d == "s":
+        c.user_data["s"] = 0
+        c.user_data["i"] = 0
+    elif d == "y":
+        c.user_data["s"] = c.user_data.get("s", 0) + 1
+        c.user_data["i"] = c.user_data.get("i", 0) + 1
+    elif d == "n":
+        c.user_data["i"] = c.user_data.get("i", 0) + 1
+        
     i = c.user_data.get("i", 0)
+    
     if i < len(QUESTIONS):
         kb = [[InlineKeyboardButton("Да", callback_data="y"), InlineKeyboardButton("Нет", callback_data="n")]]
         await q.edit_message_text(QUESTIONS[i], reply_markup=InlineKeyboardMarkup(kb))
     else:
-        await q.edit_message_text(f"{get_res(c.user_data.get('s'))}
-@async_mind_it")
+        s = c.user_data.get("s", 0)
+        res = get_res(s)
+        await q.edit_message_text(f"Результат: {res}\n\nПодпишись на @async_mind_it, чтобы снизить токсичность задач!")
 
 def main():
-    if not TOKEN: return
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(bh))
     if URL:
-        logger.info(f"Webhook on {PORT}")
         app.run_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN, webhook_url=f"{URL}/{TOKEN}")
     else:
-        logger.info("Polling")
-        app.run_polling(drop_pending_updates=True)
+        app.run_polling()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
